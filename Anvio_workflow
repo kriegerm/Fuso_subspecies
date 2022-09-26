@@ -1,0 +1,84 @@
+#Change the file names
+for item in *.fna;
+do 
+	storevar=$(echo `ls $item | cut -d"." -f1`)
+	mv $item ${storevar}.fasta
+done
+
+#Create genomes.txt list
+ls *fasta | awk 'BEGIN{FS=".fasta"}{print $1}' > genomes.txt
+
+#Reformat the file names and cut out small contigs
+for g in `cat genomes.txt`
+do
+    echo
+    echo "Working on $g ..."
+    echo
+    anvi-script-reformat-fasta ${g}.fasta \
+                               --min-len 2500 \
+                               --simplify-names \
+                               -o ${g}_scaffolds_2.5K.fasta
+done
+
+#Create contigs db
+for g in `cat genomes.txt`
+do
+    echo
+    echo "Working on $g ..."
+    echo
+    anvi-gen-contigs-database -f ${g}_scaffolds_2.5K.fasta \
+                              -o ${g}.db \
+                              --num-threads 4 \
+                              -n ${g}
+done
+
+#Analyze dbs
+for g in *.db
+do
+    anvi-run-hmms -c $g --num-threads 4
+    anvi-run-ncbi-cogs -c $g --num-threads 4
+    anvi-scan-trnas -c $g --num-threads 4
+    anvi-run-scg-taxonomy -c $g --num-threads 4
+done
+
+
+#LOOK FOR CONTAMINATION
+anvi-script-gen-genomes-file --input-dir ./ -o external-genomes.txt
+anvi-estimate-genome-completeness -e external-genomes.txt
+
+##LOOK AT GENE STATS
+anvi-display-contigs-stats *db
+
+#Make extra text file for the layers-additional-data (edit this in excel to get it formatted correctly)
+for file in *.fasta;
+do
+	echo $file
+	head -n 1 $file
+done
+
+#COMPUTE THE PANGENOME
+$ anvi-gen-genomes-storage -e external-genomes.txt -o Fuso_GENOMES.db
+$ anvi-pan-genome -g Fuso_GENOMES.db --project-name Fuso_PANGENOME --num-threads 4 2>> pangenome_log.txt
+
+#IMPORT NEW LAYERS (CLADES)
+anvi-import-misc-data -p Fuso_PANGENOME/Fuso_PANGENOME-PAN.db -t layers ../layers_additional_data.txt
+
+#COMPUTE FUNCTIONAL ENRICHMNET
+#see this page for explanation of results: https://merenlab.org/2016/11/08/pangenomics-v2/
+$ anvi-compute-functional-enrichment-in-pan -p Fuso_PANGENOME/Fuso_PANGENOME-PAN.db -g Fuso_GENOMES.db  -o functional-enrichment_by_clade.txt --category-variable clade --annotation-source COG20_FUNCTION
+
+#COMPUTE ANI
+$ anvi-compute-genome-similarity --external-genomes external-genomes.txt --program pyANI --output-dir ANI --num-threads 6 --pan-db Fuso_PANGENOME/Fuso_PANGENOME-PAN.db 
+
+#As explained here: single-copy core gene clusters will contain many poorly aligned gene clusters that you may not want to use for a phylogenomic analysis so as to minimize the influence of noise that stems from bioinformatics decisions regarding where to place gaps. On the other hand, there will be many gene clusters that are near-identical in this collection, which would be rather useless to infer phylogenomic relationships. Luckily, you could use homogeneity indices and advanced search options to identify those that are geometrically perfect, but functionally diverse. https://merenlab.org/2016/11/08/pangenomics-v2/
+
+#FILTER USING ANVI'O INTERACTIVE INTO THE BIN "FunHom.95_GenHom1_SCG"
+Min number of genomes where cluster occurs: 
+Max genes from each genome: 1
+Max functional homogenicity index: .95
+Max genometric homogenicity index: 1
+
+#USE THE "FunHom.95_GenHom1_SCG" TO MAKE A TREE IN THE ANVI'O WORKSPACE......otherwise the FastTree algorithm won't work because there are too many gene calls to consider.
+
+#DISPLAY THE PANGENOME
+$ anvi-display-pan -p Fuso_PANGENOME/Fuso_PANGENOME-PAN.db -g Fuso_GENOMES.db
