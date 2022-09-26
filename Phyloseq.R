@@ -2,11 +2,6 @@
 library("dplyr")
 library("phyloseq")
 library("ggplot2")
-library("ggpubr")
-library("microbiome")
-library("gganimate")
-library("viridis")
-library("rstatix")
 
 ########################
 #### IMPORTING DATA ####
@@ -66,15 +61,6 @@ metadata_pruned$total_reads <- sample_sums(phylo_obj_f_pruned)
 read_counts_pruned <- arrange(metadata_pruned, total_reads)
 summarize_phyloseq(phylo_obj_f_pruned)
 
-
-############################
-##### SUBSETTING DATA #####
-############################
-
-#If you want to specifically subset your sample for the REMAINDER of the analysis, you can do that by patient or whatever you choose
-#phylo_obj_f<- subset_samples(phylo_obj_f, Type=="Abscess")
-
-
 ############################
 ##### Filter Singletons #####
 ############################
@@ -84,7 +70,7 @@ summarize_phyloseq(phylo_obj_f_pruned_fs)
 #Use singleton Filtered Data for all other analysis!
 #Write out a file of the fs data so you can look at it in excel or whatever you want to do 
 phylo_obj_f_pruned_fs_df <- psmelt(phylo_obj_f_pruned_fs)
-write.csv(phylo_obj_f_pruned_fs_df,"/Users/kriegema/Library/CloudStorage/OneDrive-OregonHealth&ScienceUniversity/FusoZinProt/Counts-Fs.csv", row.names = FALSE)
+write.csv(phylo_obj_f_pruned_fs_df,"FusoZinProt/Counts-Fs.csv", row.names = FALSE)
 
 
 ############################
@@ -95,10 +81,9 @@ phylo_obj_f_pruned_fs_t = transform_sample_counts(phylo_obj_f_pruned_fs, functio
 otu_table(phylo_obj_f_pruned_fs_t)
 
 #transform to relative abundance with translated pseudo count
-phylo_obj_f_pruned_fs_t_n = transform_sample_counts(phylo_obj_f_pruned_fs_t, function(x) (x)/sum(x)) ##can use microbiome package instead of this, see line below
+phylo_obj_f_pruned_fs_t_n = transform_sample_counts(phylo_obj_f_pruned_fs_t, function(x) (x)/sum(x))
 otu_table(phylo_obj_f_pruned_fs_t_n)
 
-#microbiome::transform(phylo_obj_fs_t, transform=clr) ##Can also do this filtering step insetad of the transform_sample_counts step above. Kris says that he prefers CLR, but the log10 transformation is widely accepted so we need to do this for transformations to publish
 
 #########################
 ### Agglomerate Data ####
@@ -119,11 +104,6 @@ phylo_obj_f_pruned_fs_t_n_sglom_df$Species <- gsub("s__","",as.character(phylo_o
 ################
 #ggplots Bar Plot
 ################
-
-devtools::install_github("jaredhuling/jcolors")
-library(jcolors)
-display_jcolors("pal2")
-
 #Make sure all the abundances are 1
 aggregate(phylo_obj_f_pruned_fs_t_n_sglom_df$Abundance, list(phylo_obj_f_pruned_fs_t_n_sglom_df$Sample), FUN=sum)
 phylo_obj_f_pruned_fs_t_n_sglom_df
@@ -147,8 +127,6 @@ phylo_obj_f_pruned_fs_t_n_sglom_df%>%
   facet_grid(~factor(Type, levels=c("Plaque", "Abscess")), scales="free") +
   scale_fill_discrete(limits = c("animalis", "nucleatum", "perdiodonticum", "polymorphum", "vincentii"))+
   scale_fill_manual(values=c("#5290f2", "#F9CBAD", "#969595", "#f5f573", "#4ae059"))
-# scale_fill_manual(values=c("#B4C8E8", "#F9CBAD", "#BFBFBF", "#FFE699", "#E3F1D9"))
-#scale_fill_jcolors("pal2")  
 
 ggsave(path = "~/Desktop/", filename="RelAbund.pdf", height =3.5, device='pdf', dpi=1000)
                                                     
