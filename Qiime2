@@ -1,0 +1,114 @@
+#Do some file name editing - actually didn't do this because it broke the Qiime2 importer for some reason! But keeping it here because the code worked and it might be helpful in the future.
+for x in *.fastq.gz; do mv $x  ${x/_S/_};done
+
+#Import 
+conda activate qiime2-2022.2
+
+qiime tools import \
+  --type 'SampleData[PairedEndSequencesWithQuality]' \
+  --input-path rawreads \
+  --input-format CasavaOneEightSingleLanePerSampleDirFmt \
+  --output-path demux-paired-end.qza
+
+#Visualize the reads
+qiime demux summarize \
+  --i-data demux-paired-end.qza \
+  --o-visualization demux-paired-end.qza
+
+qiime tools view demux-paired-end.qza.qzv
+
+#Run Dada2
+qiime dada2 denoise-paired \
+  --i-demultiplexed-seqs /demux-paired-end.qza \
+  --p-trunc-len-f 265 \
+  --p-trunc-len-r 220 \
+  --p-trim-left-f 25 \
+  --p-trim-left-r 25 \
+  --p-n-threads 0 \
+  --output-dir Qiime2/Trimmed  \
+  --verbose  
+
+#Generate Rep Seqs
+qiime metadata tabulate \
+--m-input-file Qiime2/Trimmed/representative_sequences.qza \
+--o-visualization Qiime2/Trimmed/representative_sequences.qza
+
+#Add metadata
+qiime feature-table summarize \
+  --i-table Qiime2/Trimmed/table.qza \
+  --o-visualization Qiime2/Trimmed/table.qzv \
+  --m-sample-metadata-file metadata.txt
+
+qiime tools view Qiime2/Trimmed/table.qzv
+
+#Make a tree
+qiime phylogeny align-to-tree-mafft-fasttree \
+  --i-sequences Qiime2/Trimmed/representative_sequences.qza \
+  --output-dir Qiime2/Trimmed/Tree \
+  --verbose
+
+#Export Tree
+qiime tools export \
+  --input-path Qiime2/Trimmed/Tree/rooted_tree.qza \
+  --output-path Qiime2/Trimmed/Tree/Unfiltered_Rooted_tree_for_phyloseq
+
+
+#Make Fuso Zinc Prot Classifier
+qiime tools import \
+  --type 'FeatureData[Sequence]' \
+  --input-path Classifiercreation/Fuso_ZincProt.fasta  \
+  --output-path Classifiercreation/Fuso_zincprot.qza
+
+qiime tools import \
+  --type 'FeatureData[Taxonomy]' \
+  --input-format HeaderlessTSVTaxonomyFormat \
+  --input-path Classifiercreation/Fuso_ZincProt_ref-taxonomy.txt \
+  --output-path Classifiercreation/Fuso_ZincProt_ref-taxonomy.qza
+
+#BLAST to classifier
+qiime feature-classifier classify-consensus-blast \
+  --i-query Qiime2/Trimmed/representative_sequences.qza \
+  --i-reference-reads Classifiercreation/Fuso_zincprot.qza \
+  --i-reference-taxonomy Classifiercreation/Fuso_ZincProt_ref-taxonomy.qza \
+  --p-perc-identity 0.7 \
+  --p-maxaccepts 1 \
+  --o-classification Qiime2/Trimmed/Blast_taxonomy.qza \
+  --verbose
+
+#Add taxonomy to reps
+qiime metadata tabulate \
+  --m-input-file Qiime2/Trimmed/representative_sequences.qza \
+  --m-input-file Qiime2/Trimmed/Blast_taxonomy.qza \
+  --o-visualization Qiime2/Trimmed/Blast_taxonomy.qzv
+
+#Barplot
+qiime taxa barplot \
+  --i-table Qiime2/Trimmed/table.qza \
+  --i-taxonomy Qiime2/Trimmed/Blast_taxonomy.qza \
+  --m-metadata-file metadata.txt \
+  --output-dir Qiime2/Trimmed/Barplot
+
+qiime tools view Qiime2/Trimmed/Barplot/visualization.qzv
+
+#Other stuff outside of conda:
+Take the blast_taxonomy.qza and open in text editor (BBedit) and access data/.tsv Change headers to [#OTUID taxonomy confidence] and save. use that as the observation-metadata-fp input and use the mapping file for the –m input for the biom add-metadata plugin!
+
+EXPORT THE (unfiltered) TABLE
+qiime tools export \
+--input-path Qiime2/Trimmed/table.qza \
+--output-path Qiime2/Trimmed/Files_For_Phyloseq
+
+#Add Taxonomy to .biom file
+biom add-metadata \
+  -i Qiime2/Trimmed/Files_For_Phyloseq/feature-table.biom \
+  -m metadata.tsv \
+  --observation-metadata-fp Qiime2/Trimmed/taxonomy.tsv \
+  -o Qiime2/Trimmed/Files_For_Phyloseq/feature_table_w_taxonomy.biom \
+  --sc-separated taxonomy \
+  --observation-header OTUID,taxonomy,confidence
+
+biom convert \
+-i Qiime2/Trimmed/Files_For_Phyloseq/feature_table_w_taxonomy.biom \
+-o Qiime2/Trimmed/Files_For_Phyloseq/feature_table_w_taxonomy.tsv \
+--to-tsv \
+--header-key taxonomy 
