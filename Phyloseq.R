@@ -139,33 +139,28 @@ library("Hmisc")
 library(tidyverse)
 library(corrplot)
 
-Counts_Fs_relabundance_paired_reformatted_forCor = subset(Counts_Fs_relabundance_paired_reformatted_forR, select = -c(1)) #remove the first row from the original df
-Counts_Fs_relabundance_paired_reformatted_forCor <- Counts_Fs_relabundance_paired_reformatted_forCor %>% remove_rownames %>% column_to_rownames(var="Patient") #turn the first row (patient) into row names
+flattenCorrMatrix <- function(cormat, pmat) {
+  ut <- upper.tri(cormat)
+  data.frame(
+    row = rownames(cormat)[row(cormat)[ut]],
+    column = rownames(cormat)[col(cormat)[ut]],
+    cor  =(cormat)[ut],
+    p = pmat[ut]
+  )
+}
 
-Counts_Fs_relabundance_paired_reformatted_forCor2 <-
-  Counts_Fs_relabundance_paired_reformatted_forCor %>%
-  rename_all(funs(c("FFAbscess_animalis", "JJAbscess_fusiforme", "GGAbscess_nucleatum", "IIAbscess_polymorphum", "HHAbscess_periodonticum",
-                    "AAPlaque_animalis", "EEPlaque_fusiforme", "BBPlaque_nucleatum", "DDPlaque_polymorphum", "CCPlaque_periodonticum"))) %>%
-  select(AAPlaque_animalis, BBPlaque_nucleatum, CCPlaque_periodonticum, DDPlaque_polymorphum, EEPlaque_fusiforme, 
-         FFAbscess_animalis, GGAbscess_nucleatum, HHAbscess_periodonticum, IIAbscess_polymorphum, JJAbscess_fusiforme)
+getwd()
+Counts_Fs_n_reformatted <- read_csv("~/OneDrive - Oregon Health & Science University/MERRITT/FUSO_Subspecies/FusoZinProt_Qiime/UPDATED_analysis_12.22/Counts_Fs_n_reformatted.csv")
 
-Counts_Fs_relabundance_paired_reformatted_forCor2
+Counts_Fs_n_reformatted <- as.data.frame(Counts_Fs_n_reformatted)
+Counts_Fs_n_reformatted <- Counts_Fs_n_reformatted %>% remove_rownames %>% column_to_rownames(var="Sample") #turn the first row (patient) into row names
+Counts_Fs_n_reformatted <- as.matrix(Counts_Fs_n_reformatted)
 
-Res = rcorr(as.matrix(Counts_Fs_relabundance_paired_reformatted_forCor2), type="spearman")
-Res$P
-
-res2 = cor(Counts_Fs_relabundance_paired_reformatted_forCor2)
-testRes2 = cor.mtest(Counts_Fs_relabundance_paired_reformatted_forCor2,conf.level = 0.95)
-testRes2
+res2 = cor(Counts_Fs_n_reformatted, method = c("spearman"))
+testRes2 = cor.mtest(Counts_Fs_n_reformatted, conf.level = 0.95)
+#testRes2 = cor.test(Counts_Fs_n_reformatted, conf.level = 0.95)
 
 plot.new()
-corrplot(res2, p.mat = testRes2$p, sig.level = 0.05, 
-         type = "upper", insig='blank', addCoef.col ='black', 
-         order = "hclust", tl.cex = .6,
-         number.cex = 0.6, tl.col = "black", tl.srt = 45, col = COL2('BrBG'))
-
-
-png(width=7, height=5, units="in", res=800, file="~/Desktop/Cor-matrix.png")
 corrplot(res2, p.mat = testRes2$p, 
          insig = 'label_sig', 
          sig.level = c(0.001, 0.01, 0.05), 
@@ -176,7 +171,4 @@ corrplot(res2, p.mat = testRes2$p,
          pch.col = 'grey20',
          tl.col = "black", 
          tl.srt = 45)
-dev.off()                                                    
-                                                    
-                                                  
-
+dev.off()
